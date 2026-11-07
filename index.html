@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ajak Nongkrong</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F6F5FF;--card:#fff;--ink:#23205A;--mute:#66658A;--line:#E3E1F5;--acc:#FFB627;--acc-ink:#3A2A00;--mint:#17936F;--chip:#ECEAFB;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#15133A;--card:#201D52;--ink:#F1F0FF;--mute:#A9A7D4;--line:#312E6E;--chip:#2B2868;--mint:#4FD6A9;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.45;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.app{max-width:480px;margin:0 auto;padding:20px 18px 40px}
+h1{font-size:2rem;line-height:1.05;font-weight:800;margin:8px 0 10px}h2{font-size:1.4rem;font-weight:800;margin:0}
+p{margin:0 0 14px;color:var(--mute)}label{font-weight:600;font-size:.9rem}
+input,select{width:100%;font:inherit;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);margin:6px 0 12px}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.btn{font:inherit;font-weight:800;border:0;border-radius:14px;padding:13px 20px;background:var(--ink);color:var(--bg);cursor:pointer;width:100%}
+.btn.acc{background:var(--acc);color:var(--acc-ink)}.btn.ghost{background:var(--chip);color:var(--ink)}.btn.sm{width:auto;padding:9px 16px;border-radius:12px}
+.btn:disabled{opacity:.5}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px}
+.chip{border:0;background:var(--chip);color:var(--ink);font:inherit;font-weight:600;padding:9px 14px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"],.tag.m{background:var(--acc);color:var(--acc-ink)}
+.tag{display:inline-block;background:var(--chip);border-radius:999px;padding:3px 10px;font-size:.8rem;font-weight:600;margin:0 6px 6px 0}
+.card{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px;border:1px solid var(--line)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.name{font-weight:800}.meta{font-size:.85rem;color:var(--mute)}.ok{color:var(--mint);font-weight:600;font-size:.82rem}
+.pill{background:var(--chip);border-radius:999px;padding:5px 12px;font-size:.8rem;font-weight:600;white-space:nowrap}
+.tabs{display:flex;gap:6px;background:var(--chip);border-radius:14px;padding:4px;margin:0 0 18px;position:sticky;top:0;z-index:5}
+.tabs button{flex:1;border:0;background:none;font:inherit;font-weight:700;color:var(--mute);padding:9px 4px;border-radius:10px;cursor:pointer}
+.tabs button[aria-current="true"]{background:var(--card);color:var(--ink)}
+.bg{position:fixed;inset:0;background:rgba(10,8,40,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:var(--card);width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0));max-height:92vh;overflow:auto}
+.msgs{display:flex;flex-direction:column;gap:8px;margin:12px 0;min-height:140px;max-height:44vh;overflow:auto}
+.b{max-width:80%;padding:9px 13px;border-radius:16px;background:var(--chip)}.b.me{align-self:flex-end;background:var(--acc);color:var(--acc-ink)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:30px;background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;z-index:30;max-width:90%;text-align:center}
+.empty{text-align:center;padding:36px 12px;color:var(--mute)}.row{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div><div id="layer"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const SB_URL="ISI_PROJECT_URL",SB_KEY="ISI_ANON_KEY";
+const IN=["Kopi","Board game","Futsal","Jalan sore","Kuliner","Film","Fotografi","Gowes","Musik","Baca buku"];
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let me,prof,tab="near",sel=[],mail="",chat=null;
+const view=h=>{$("#app").innerHTML=h};
+function toast(m){const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+const bad=e=>{if(e){toast(e.message||"Terjadi kesalahan");return true}return false};
+const sheet=h=>{$("#layer").innerHTML=`<div class="bg" data-a="bg"><div class="sheet" role="dialog" aria-modal="true">${h}</div></div>`};
+const closeS=()=>{$("#layer").innerHTML="";chat=null};
+const fmt=d=>new Date(d).toLocaleString("id-ID",{weekday:"short",hour:"2-digit",minute:"2-digit"});
+
+async function boot(){
+ const{data:{session}}=await sb.auth.getSession();
+ if(!session)return login(0);
+ me=session.user;
+ const{data,error}=await sb.from("profiles").select("*").eq("id",me.id).maybeSingle();
+ if(bad(error))return;
+ prof=data;if(!prof)return setup();
+ sb.channel("m").on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`receiver=eq.${me.id}`},p=>{
+  if(chat&&chat.id===p.new.sender){addMsg(p.new.body,false)}else toast("Pesan baru masuk");if(tab==="msg")go("msg")}).subscribe();
+ go(tab);
+}
+function login(step){
+ view(step?`<h1>Cek emailmu</h1><p>Tautan masuk dikirim ke ${esc(mail)}. Buka emailnya di perangkat ini, klik tautannya, dan kamu otomatis masuk. Cek folder spam bila belum ada.</p><button class="btn ghost" data-a="back">Ganti email</button>`
+ :`<h1>Ketemu teman baru, bukan cuma chat.</h1><p>Masuk lewat tautan yang kami kirim ke emailmu. Tanpa password.</p><label for="em">Email</label><input id="em" type="email" autocomplete="email"><button class="btn acc" data-a="otp">Kirim tautan masuk</button>`);
+}
+function setup(){
+ view(`<h1>Kenalan dulu</h1><p>Lokasimu hanya dibagikan sebagai perkiraan ±500 m.</p><label for="nm">Nama panggilan</label><input id="nm" maxlength="30" autocomplete="given-name">
+ <label>Minat (pilih minimal 2)</label><div class="chips">${IN.map(x=>`<button class="chip" aria-pressed="${sel.includes(x)}" data-a="chip" data-v="${x}">${x}</button>`).join("")}</div>
+ <button class="btn acc" data-a="save">Aktifkan lokasi dan mulai</button>`);
+}
+function locate(){return new Promise((ok,no)=>navigator.geolocation?navigator.geolocation.getCurrentPosition(p=>ok(p.coords),no,{timeout:10000}):no())}
+async function pushLoc(){try{const c=await locate();return !bad((await sb.rpc("set_location",{lat:c.latitude,lng:c.longitude})).error)}catch(e){toast("Izinkan akses lokasi agar bisa menemukan orang terdekat");return false}}
+async function go(t){
+ tab=t;
+ const T=[["near","Terdekat"],["inv","Ajakan"],["msg","Pesan"],["me","Profil"]];
+ view(`<div class="tabs" role="tablist">${T.map(([k,l])=>`<button data-a="tab" data-v="${k}" aria-current="${k===t}">${l}</button>`).join("")}</div><div id="body"><p class="meta">Memuat…</p></div>`);
+ const b=$("#body");
+ if(t==="near"){
+  const{data,error}=await sb.rpc("nearby",{radius_km:5});if(bad(error))return;
+  const L=(data||[]).map(p=>({...p,m:p.interests.filter(x=>prof.interests.includes(x)).length})).sort((a,c)=>c.m-a.m||a.km-c.km);
+  b.innerHTML=`<h2 style="margin-bottom:12px">Sekitarmu</h2>`+(L.length?L.map(p=>`<div class="card"><div class="top"><span class="name">${esc(p.name)}</span><span class="pill">± ${String(p.km).replace(".",",")} km</span></div>${p.verified?'<span class="ok">Terverifikasi</span>':""}
+  <p style="margin:6px 0">${esc(p.bio)}</p><div>${p.interests.map(x=>`<span class="tag ${prof.interests.includes(x)?"m":""}">${esc(x)}</span>`).join("")}</div>
+  <button class="btn acc sm" data-a="chat" data-v="${p.id}" data-n="${esc(p.name)}">${p.m?`Sapa · ${p.m} minat sama`:"Sapa"}</button></div>`).join(""):`<div class="empty">Belum ada orang di radius 5 km. Coba lagi nanti atau buat ajakan.</div>`);
+ }
+ if(t==="inv"){
+  const{data,error}=await sb.rpc("open_invites");if(bad(error))return;
+  b.innerHTML=`<div class="top" style="margin-bottom:12px"><h2>Ajakan Cepat</h2><button class="btn acc sm" data-a="new">Buat</button></div>`+((data||[]).length?data.map(v=>`<div class="card"><div class="top"><span class="name">${esc(v.title)}</span><span class="pill">${fmt(v.starts_at)}</span></div>
+  <div class="meta">${esc(v.place)} · oleh ${esc(v.host_name)} · ${v.cnt} dari ${v.max_people} orang</div>
+  <button class="btn ${v.joined?"ghost":"acc"} sm" style="margin-top:10px" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${!v.joined&&v.cnt>=v.max_people?"disabled":""}>${v.joined?"Batal gabung":v.cnt>=v.max_people?"Penuh":"Gabung"}</button></div>`).join(""):`<div class="empty">Belum ada ajakan. Jadilah yang pertama.</div>`);
+ }
+ if(t==="msg"){
+  const{data,error}=await sb.rpc("chat_threads");if(bad(error))return;
+  b.innerHTML=`<h2 style="margin-bottom:12px">Pesan</h2>`+((data||[]).length?data.sort((a,c)=>new Date(c.last_at)-new Date(a.last_at)).map(t=>`<button class="card" style="width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer" data-a="chat" data-v="${t.other}" data-n="${esc(t.name)}"><div class="name">${esc(t.name)}</div><div class="meta">${esc(t.last_body)}</div></button>`).join(""):`<div class="empty">Belum ada obrolan. Sapa seseorang di tab Terdekat.</div>`);
+ }
+ if(t==="me"){
+  b.innerHTML=`<h2 style="margin-bottom:12px">Profil</h2><div class="card"><div class="name">${esc(prof.name)}</div>${prof.verified?'<span class="ok">Terverifikasi</span>':'<span class="meta">Belum terverifikasi</span>'}<div style="margin-top:10px">${prof.interests.map(x=>`<span class="tag m">${esc(x)}</span>`).join("")}</div></div>
+  <div class="card"><div class="top"><div><div class="name">Mode tidak terlihat</div><div class="meta">Sembunyikan dirimu dari pencarian</div></div><input type="checkbox" id="gh" style="width:24px;height:24px;margin:0" ${prof.ghost?"checked":""} aria-label="Mode tidak terlihat"></div></div>
+  <button class="btn ghost" style="margin-bottom:10px" data-a="loc">Perbarui lokasiku</button><button class="btn ghost" data-a="out">Keluar</button>`;
+  $("#gh").onchange=async e=>{const{error}=await sb.from("profiles").update({ghost:e.target.checked}).eq("id",me.id);if(!bad(error))prof.ghost=e.target.checked}
+ }
+}
+function addMsg(t,mine){const m=$("#ms");if(!m)return;const d=document.createElement("div");d.className="b"+(mine?" me":"");d.textContent=t;m.appendChild(d);m.scrollTop=m.scrollHeight}
+async function openChat(id,name){
+ chat={id,name};
+ sheet(`<div class="top"><div class="name">${esc(name)}</div><button class="btn ghost sm" data-a="bg">Tutup</button></div><p class="meta">Bertemu pertama kali? Pilih tempat umum.</p>
+ <div class="msgs" id="ms" aria-live="polite"></div><div class="row"><input id="ci" placeholder="Tulis pesan" maxlength="500" style="margin:0"><button class="btn acc sm" data-a="send">Kirim</button></div>
+ <div class="row" style="justify-content:center;margin-top:10px"><button class="chip" data-a="block">Blokir</button><button class="chip" data-a="report">Laporkan</button></div>`);
+ const{data,error}=await sb.from("messages").select("sender,body").or(`and(sender.eq.${me.id},receiver.eq.${id}),and(sender.eq.${id},receiver.eq.${me.id})`).order("created_at").limit(100);
+ if(bad(error))return;data.forEach(m=>addMsg(m.body,m.sender===me.id));
+}
+async function send(){const i=$("#ci"),t=i.value.trim();if(!t||!chat)return;i.value="";
+ const{error}=await sb.from("messages").insert({receiver:chat.id,body:t});if(bad(error))return;addMsg(t,true)}
+function newSheet(){
+ const d=new Date(Date.now()+36e5*3);d.setMinutes(0);const v=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+ sheet(`<h2>Buat ajakan</h2><label for="t">Mau ngapain?</label><input id="t" maxlength="40"><label for="p">Di mana (tempat umum)</label><input id="p" maxlength="40">
+ <label for="w">Waktu</label><input id="w" type="datetime-local" value="${v}"><label for="m">Jumlah orang</label><select id="m"><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+ <button class="btn acc" data-a="newok">Kirim ajakan</button>`);
+}
+const ACT={
+ bg:(v,t)=>{if(t.classList.contains("bg")&&event.target!==t)return;closeS()},
+ otp:async()=>{mail=$("#em").value.trim();if(!mail)return toast("Isi email dulu");const{error}=await sb.auth.signInWithOtp({email:mail,options:{emailRedirectTo:location.origin+location.pathname}});if(!bad(error))login(1)},
+ back:()=>login(0),
+ verify:async()=>{const{error}=await sb.auth.verifyOtp({email:mail,token:$("#cd").value.trim(),type:"email"});if(!bad(error))boot()},
+ chip:(v,t)=>{const i=sel.indexOf(v);i<0?sel.push(v):sel.splice(i,1);t.setAttribute("aria-pressed",i<0)},
+ save:async()=>{const n=$("#nm").value.trim();if(n.length<2)return toast("Isi nama minimal 2 huruf");if(sel.length<2)return toast("Pilih minimal 2 minat");
+  const{error}=await sb.from("profiles").insert({id:me.id,name:n,interests:sel});if(bad(error))return;
+  await pushLoc();boot()},
+ tab:v=>go(v),chat:(v,t)=>openChat(v,t.dataset.n),send,
+ join:async v=>{const{error}=await sb.from("invite_members").insert({invite_id:+v});if(!bad(error))go("inv")},
+ leave:async v=>{const{error}=await sb.from("invite_members").delete().eq("invite_id",+v).eq("user_id",me.id);if(!bad(error))go("inv")},
+ new:newSheet,
+ newok:async()=>{const t=$("#t").value.trim(),p=$("#p").value.trim();if(t.length<2||p.length<2)return toast("Isi kegiatan dan tempat");
+  const{error}=await sb.from("invites").insert({title:t,place:p,starts_at:new Date($("#w").value).toISOString(),max_people:+$("#m").value});if(!bad(error)){closeS();toast("Ajakan dibuat");go("inv")}},
+ block:async()=>{const{error}=await sb.from("blocks").insert({blocked:chat.id});if(!bad(error)){closeS();toast("Pengguna diblokir");go(tab)}},
+ report:async()=>{const{error}=await sb.from("reports").insert({reported:chat.id,reason:"dilaporkan dari chat"});if(!bad(error))toast("Laporan dikirim")},
+ loc:async()=>{if(await pushLoc())toast("Lokasi diperbarui")},
+ out:async()=>{await sb.auth.signOut();location.reload()}
+};
+document.addEventListener("click",e=>{const t=e.target.closest("[data-a]");if(t&&ACT[t.dataset.a])ACT[t.dataset.a](t.dataset.v,t)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeS();if(e.key==="Enter"&&e.target.id==="ci")send()});
+if(SB_URL.startsWith("ISI_"))view(`<h1>Belum dikonfigurasi</h1><p>Isi SB_URL dan SB_KEY di bagian atas file ini. Langkah lengkap ada di README.md.</p>`);else boot();
+</script>
+</body>
+</html>
