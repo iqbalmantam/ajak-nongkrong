@@ -159,11 +159,11 @@ async function go(t){
   <button class="btn acc" style="margin-top:4px" data-a="chat" data-v="${p.id}" data-n="${esc(p.name)}">${p.m?`Sapa · ${p.m} minat sama`:"Sapa"}</button></div>`).join(""):`<div class="empty">Belum ada orang di radius ${rad} km.<br>Coba perbesar radius atau perbarui lokasimu.</div><button class="btn ghost" data-a="loc">Perbarui lokasiku</button>`);
  }
  if(t==="inv"){
-  const{data,error}=await sb.rpc("open_invites");if(bad(error))return;invs=data||[];
+  const[{data,error},{data:mi}]=await Promise.all([sb.rpc("open_invites"),sb.from("invites").select("id").eq("host",me.id)]);if(bad(error))return;invs=data||[];const mine=new Set((mi||[]).map(x=>x.id));
   b.innerHTML=`<div class="top" style="margin-bottom:12px"><h2>Ajakan Cepat</h2><button class="btn acc sm" data-a="new">+ Buat</button></div>`+(invs.length?invs.map(v=>`<div class="card"><div class="top"><span class="name">${esc(v.title)}</span><span class="pill">${fmt(v.starts_at)}</span></div>
   <div class="meta" style="margin-top:4px">${esc(v.place)} · oleh ${esc(v.host_name)}</div>
   <div class="bar" role="img" aria-label="${v.cnt} dari ${v.max_people} orang"><i style="width:${Math.min(100,v.cnt/v.max_people*100)}%"></i></div><div class="meta">${v.cnt} dari ${v.max_people} orang</div>
-  <div class="row" style="margin-top:10px"><button class="btn ghost sm" style="flex:1" data-a="share" data-v="${v.id}">Bagikan</button><button class="btn ${v.joined?"ghost":"acc"} sm" style="flex:1" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${!v.joined&&v.cnt>=v.max_people?"disabled":""}>${v.joined?"Batal gabung":v.cnt>=v.max_people?"Penuh":"Gabung"}</button></div></div>`).join(""):`<div class="empty">Belum ada ajakan. Jadilah yang pertama.</div><button class="btn acc" data-a="new">Buat ajakan</button>`);
+  <div class="row" style="margin-top:10px"><button class="btn ghost sm" style="flex:1" data-a="share" data-v="${v.id}">Bagikan</button><button class="btn ${v.joined?"ghost":"acc"} sm" style="flex:1" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${!v.joined&&v.cnt>=v.max_people?"disabled":""}>${v.joined?"Batal gabung":v.cnt>=v.max_people?"Penuh":"Gabung"}</button></div>${mine.has(v.id)?`<button class="btn ghost sm" style="width:100%;margin-top:8px;color:#E5484D" data-a="del" data-v="${v.id}">Hapus ajakan</button>`:""}</div>`).join(""):`<div class="empty">Belum ada ajakan. Jadilah yang pertama.</div><button class="btn acc" data-a="new">Buat ajakan</button>`);
  }
  if(t==="msg"){
   const{data,error}=await sb.rpc("chat_threads");if(bad(error))return;
@@ -222,6 +222,7 @@ const ACT={
   const text=`Ayo gabung: ${x.title} di ${x.place}, ${fmt(x.starts_at)}`;
   try{if(navigator.share){await navigator.share({title:x.title,text,url});return}}catch(e){if(e.name==="AbortError")return}
   try{await navigator.clipboard.writeText(text+"\n"+url);toast("Link disalin, tempel di WhatsApp")}catch(e){prompt("Salin link ini:",url)}},
+ del:async v=>{if(!confirm("Hapus ajakan ini? Peserta yang sudah gabung juga ikut terhapus."))return;const{data,error}=await sb.from("invites").delete().eq("id",+v).select("id");if(bad(error))return;if(!(data||[]).length)return toast("Ajakan ini tidak bisa dihapus");toast("Ajakan dihapus");go("inv")},
  newok:async()=>{const t=$("#t").value.trim(),p=$("#p").value.trim();if(t.length<2||p.length<2)return toast("Isi kegiatan dan tempat");
   const{error}=await sb.from("invites").insert({title:t,place:p,starts_at:new Date($("#w").value).toISOString(),max_people:+$("#m").value});if(!bad(error)){closeS();toast("Ajakan dibuat");go("inv")}},
  block:async()=>{const{error}=await sb.from("blocks").insert({blocked:chat.id});if(!bad(error)){closeS();toast("Pengguna diblokir");go(tab)}},
