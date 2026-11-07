@@ -40,13 +40,14 @@ input,select{width:100%;font:inherit;padding:12px 14px;border-radius:12px;border
 <body>
 <div class="app" id="app"></div><div id="layer"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <script>
-const SB_URL="https://erysagldjwrkcedtkqxj.supabase.co",SB_KEY="sb_publishable_VX7A7-ah-soIY3JFWWpQ8g_5P9pAZlZ";
+const SB_URL=(window.SB_CFG||{}).url||"ISI_PROJECT_URL",SB_KEY=(window.SB_CFG||{}).key||"";
 const IN=["Kopi","Board game","Futsal","Jalan sore","Kuliner","Film","Fotografi","Gowes","Musik","Baca buku"];
-const sb=supabase.createClient(SB_URL,SB_KEY);
+let sb;try{sb=supabase.createClient(SB_URL,SB_KEY)}catch(e){document.getElementById("app").innerHTML="<h1>Konfigurasi salah</h1><p>"+e.message+"</p><p>SB_URL harus berbentuk https://xxxx.supabase.co</p>"}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let me,prof,tab="near",sel=[],mail="",chat=null;
+let me,prof,tab="near",sel=[],mail="",chat=null,invs=[];
 const view=h=>{$("#app").innerHTML=h};
 function toast(m){const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
 const bad=e=>{if(e){toast(e.message||"Terjadi kesalahan");return true}return false};
@@ -54,6 +55,18 @@ const sheet=h=>{$("#layer").innerHTML=`<div class="bg" data-a="bg"><div class="s
 const closeS=()=>{$("#layer").innerHTML="";chat=null};
 const fmt=d=>new Date(d).toLocaleString("id-ID",{weekday:"short",hour:"2-digit",minute:"2-digit"});
 
+function hashId(){return(location.hash.match(/^#ajakan-(\d+)$/)||[])[1]}
+async function openLink(){
+ let id=hashId();try{if(!id)id=localStorage.getItem("pend");localStorage.removeItem("pend")}catch(e){}
+ if(!id)return;history.replaceState(null,"",location.pathname);
+ const{data,error}=await sb.rpc("get_invite",{p_id:+id});if(bad(error))return;
+ const v=(data||[])[0];if(!v)return toast("Ajakan tidak ditemukan atau sudah dihapus");
+ if(!invs.find(x=>x.id===v.id))invs.push(v);
+ const full=!v.joined&&v.cnt>=v.max_people;
+ sheet(`<h2>${esc(v.title)}</h2><p class="meta">${esc(v.place)} · ${fmt(v.starts_at)}<br>Oleh ${esc(v.host_name)} · ${v.cnt} dari ${v.max_people} orang</p><p>Pertemuan pertama sebaiknya di tempat umum.</p>
+ <button class="btn acc" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${full?"disabled":""}>${v.joined?"Batal gabung":full?"Penuh":"Gabung"}</button>
+ <div class="row" style="margin-top:10px"><button class="btn ghost" data-a="share" data-v="${v.id}">Bagikan</button><button class="btn ghost" data-a="bg">Tutup</button></div>`);
+}
 async function boot(){
  const{data:{session}}=await sb.auth.getSession();
  if(!session)return login(0);
@@ -63,7 +76,7 @@ async function boot(){
  prof=data;if(!prof)return setup();
  sb.channel("m").on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`receiver=eq.${me.id}`},p=>{
   if(chat&&chat.id===p.new.sender){addMsg(p.new.body,false)}else toast("Pesan baru masuk");if(tab==="msg")go("msg")}).subscribe();
- go(tab);
+ await go(tab);openLink();
 }
 function login(step){
  view(step?`<h1>Cek emailmu</h1><p>Tautan masuk dikirim ke ${esc(mail)}. Buka emailnya di perangkat ini, klik tautannya, dan kamu otomatis masuk. Cek folder spam bila belum ada.</p><button class="btn ghost" data-a="back">Ganti email</button>`
@@ -89,10 +102,10 @@ async function go(t){
   <button class="btn acc sm" data-a="chat" data-v="${p.id}" data-n="${esc(p.name)}">${p.m?`Sapa · ${p.m} minat sama`:"Sapa"}</button></div>`).join(""):`<div class="empty">Belum ada orang di radius 5 km. Coba lagi nanti atau buat ajakan.</div>`);
  }
  if(t==="inv"){
-  const{data,error}=await sb.rpc("open_invites");if(bad(error))return;
+  const{data,error}=await sb.rpc("open_invites");if(bad(error))return;invs=data||[];
   b.innerHTML=`<div class="top" style="margin-bottom:12px"><h2>Ajakan Cepat</h2><button class="btn acc sm" data-a="new">Buat</button></div>`+((data||[]).length?data.map(v=>`<div class="card"><div class="top"><span class="name">${esc(v.title)}</span><span class="pill">${fmt(v.starts_at)}</span></div>
   <div class="meta">${esc(v.place)} · oleh ${esc(v.host_name)} · ${v.cnt} dari ${v.max_people} orang</div>
-  <button class="btn ${v.joined?"ghost":"acc"} sm" style="margin-top:10px" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${!v.joined&&v.cnt>=v.max_people?"disabled":""}>${v.joined?"Batal gabung":v.cnt>=v.max_people?"Penuh":"Gabung"}</button></div>`).join(""):`<div class="empty">Belum ada ajakan. Jadilah yang pertama.</div>`);
+  <div class="row" style="margin-top:10px"><button class="btn ghost sm" data-a="share" data-v="${v.id}">Bagikan</button><button class="btn ${v.joined?"ghost":"acc"} sm" data-a="${v.joined?"leave":"join"}" data-v="${v.id}" ${!v.joined&&v.cnt>=v.max_people?"disabled":""}>${v.joined?"Batal gabung":v.cnt>=v.max_people?"Penuh":"Gabung"}</button></div></div>`).join(""):`<div class="empty">Belum ada ajakan. Jadilah yang pertama.</div>`);
  }
  if(t==="msg"){
   const{data,error}=await sb.rpc("chat_threads");if(bad(error))return;
@@ -124,7 +137,7 @@ function newSheet(){
 }
 const ACT={
  bg:(v,t)=>{if(t.classList.contains("bg")&&event.target!==t)return;closeS()},
- otp:async()=>{mail=$("#em").value.trim();if(!mail)return toast("Isi email dulu");const{error}=await sb.auth.signInWithOtp({email:mail,options:{emailRedirectTo:location.origin+location.pathname}});if(!bad(error))login(1)},
+ otp:async()=>{mail=$("#em").value.trim();const h=hashId();try{if(h)localStorage.setItem("pend",h)}catch(e){}if(!mail)return toast("Isi email dulu");const{error}=await sb.auth.signInWithOtp({email:mail,options:{emailRedirectTo:location.origin+location.pathname}});if(!bad(error))login(1)},
  back:()=>login(0),
  verify:async()=>{const{error}=await sb.auth.verifyOtp({email:mail,token:$("#cd").value.trim(),type:"email"});if(!bad(error))boot()},
  chip:(v,t)=>{const i=sel.indexOf(v);i<0?sel.push(v):sel.splice(i,1);t.setAttribute("aria-pressed",i<0)},
@@ -132,9 +145,13 @@ const ACT={
   const{error}=await sb.from("profiles").insert({id:me.id,name:n,interests:sel});if(bad(error))return;
   await pushLoc();boot()},
  tab:v=>go(v),chat:(v,t)=>openChat(v,t.dataset.n),send,
- join:async v=>{const{error}=await sb.from("invite_members").insert({invite_id:+v});if(!bad(error))go("inv")},
- leave:async v=>{const{error}=await sb.from("invite_members").delete().eq("invite_id",+v).eq("user_id",me.id);if(!bad(error))go("inv")},
+ join:async v=>{const{error}=await sb.from("invite_members").insert({invite_id:+v});if(!bad(error)){closeS();go("inv")}},
+ leave:async v=>{const{error}=await sb.from("invite_members").delete().eq("invite_id",+v).eq("user_id",me.id);if(!bad(error)){closeS();go("inv")}},
  new:newSheet,
+ share:async v=>{const x=invs.find(i=>i.id==v);if(!x)return;const url=location.origin+location.pathname+"#ajakan-"+x.id;
+  const text=`Ayo gabung: ${x.title} di ${x.place}, ${fmt(x.starts_at)}`;
+  try{if(navigator.share){await navigator.share({title:x.title,text,url});return}}catch(e){if(e.name==="AbortError")return}
+  try{await navigator.clipboard.writeText(text+"\n"+url);toast("Link disalin, tempel di WhatsApp")}catch(e){prompt("Salin link ini:",url)}},
  newok:async()=>{const t=$("#t").value.trim(),p=$("#p").value.trim();if(t.length<2||p.length<2)return toast("Isi kegiatan dan tempat");
   const{error}=await sb.from("invites").insert({title:t,place:p,starts_at:new Date($("#w").value).toISOString(),max_people:+$("#m").value});if(!bad(error)){closeS();toast("Ajakan dibuat");go("inv")}},
  block:async()=>{const{error}=await sb.from("blocks").insert({blocked:chat.id});if(!bad(error)){closeS();toast("Pengguna diblokir");go(tab)}},
@@ -142,9 +159,10 @@ const ACT={
  loc:async()=>{if(await pushLoc())toast("Lokasi diperbarui")},
  out:async()=>{await sb.auth.signOut();location.reload()}
 };
+addEventListener("hashchange",()=>{if(me&&hashId())openLink()});
 document.addEventListener("click",e=>{const t=e.target.closest("[data-a]");if(t&&ACT[t.dataset.a])ACT[t.dataset.a](t.dataset.v,t)});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeS();if(e.key==="Enter"&&e.target.id==="ci")send()});
-if(SB_URL.startsWith("ISI_"))view(`<h1>Belum dikonfigurasi</h1><p>Isi SB_URL dan SB_KEY di bagian atas file ini. Langkah lengkap ada di README.md.</p>`);else boot();
+if(SB_URL.startsWith("ISI_"))view(`<h1>Belum dikonfigurasi</h1><p>Isi url dan key di file config.js. Langkah lengkap ada di README.md.</p>`);else if(sb)boot();
 </script>
 </body>
 </html>
